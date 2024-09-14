@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  monkey-app:
+    image: ghcr.io/Sett17/motd:latest
+    restart: unless-stopped
+    container_name: motd
+    ports:
+      - "8001:8001"
+    environment:
+      # Uncomment to setup your own images.
+      # - IMAGE_DIR=/data/images
+      - LOG_FILE=/data/monkey-app.log
+    volumes:
+      - ./data:/data
+
