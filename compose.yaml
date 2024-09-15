@@ -1,8 +1,6 @@
-version: '3.8'
-
 services:
   monkey-app:
-    image: ghcr.io/Sett17/motd:latest
+    image: ghcr.io/sett17/motd:latest
     restart: unless-stopped
     container_name: motd
     ports:

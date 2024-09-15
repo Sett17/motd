@@ -16,22 +16,18 @@ import (
 )
 
 var (
-	imageDir    string
-	assetDir    string
-	logFile     string
-	port        string
-	renewalTime time.Duration
-	logger      *log.Logger
-	berlinLoc   *time.Location
-	imageMutex  = make(chan struct{}, 1) // Mutex to prevent concurrent writes
+	imageDir     string
+	assetDir     string
+	logFile      string
+	port         string
+	timezoneName string
+	logger       *log.Logger
+	location     *time.Location
+	imageMutex   = make(chan struct{}, 1) // Mutex to prevent concurrent writes
 )
 
 func init() {
-	var err error
-	berlinLoc, err = time.LoadLocation("Europe/Berlin")
-	if err != nil {
-		log.Fatalf("Failed to load Berlin timezone: %v", err)
-	}
+	// Placeholder for timezone initialization
 }
 
 func main() {
@@ -40,9 +36,15 @@ func main() {
 	flag.StringVar(&assetDir, "assetdir", getEnv("ASSET_DIR", "assets"), "Directory for assets (serving the image)")
 	flag.StringVar(&logFile, "logfile", getEnv("LOG_FILE", ""), "Log file path (leave empty to disable file logging)")
 	flag.StringVar(&port, "port", getEnv("PORT", "8080"), "Port to serve (default 8080)")
+	flag.StringVar(&timezoneName, "timezone", getEnv("TIMEZONE", "CET"), "Timezone for image renewal (default CET)")
 	flag.Parse()
 
-	renewalTime = 24 * time.Hour
+	// Load the specified timezone
+	var err error
+	location, err = time.LoadLocation(timezoneName)
+	if err != nil {
+		log.Fatalf("Failed to load timezone '%s': %v", timezoneName, err)
+	}
 
 	// Set up logging
 	logger = log.New(os.Stdout, "", log.LstdFlags)
@@ -58,7 +60,7 @@ func main() {
 	}
 
 	// Ensure asset directory exists
-	err := os.MkdirAll(assetDir, 0755)
+	err = os.MkdirAll(assetDir, 0755)
 	if err != nil {
 		logger.Fatalf("Failed to create asset directory: %v", err)
 	}
@@ -73,7 +75,7 @@ func main() {
 	http.HandleFunc("/", servePage)
 	http.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir(assetDir))))
 
-	logger.Printf("Server started on :%s with renewal time of %v", port, renewalTime)
+	logger.Printf("Server started on :%s. Images will be renewed at midnight in timezone '%s'.", port, timezoneName)
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		logger.Fatalf("Server failed: %v", err)
 	}
@@ -88,9 +90,10 @@ func getEnv(key, fallback string) string {
 
 func scheduleImageUpdates() {
 	for {
-		now := time.Now().In(berlinLoc)
-		nextUpdate := now.Add(renewalTime)
-		duration := nextUpdate.Sub(now)
+		now := time.Now().In(location)
+		// Compute next midnight in the specified timezone
+		nextMidnight := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, location)
+		duration := nextMidnight.Sub(now)
 
 		logger.Printf("Next image update in %v", duration)
 
@@ -99,7 +102,7 @@ func scheduleImageUpdates() {
 	}
 }
 
-var assetImageFilename = "today.jpg"
+var assetImageFilename = ""
 
 func updateImageForToday() {
 	imageMutex <- struct{}{}        // Lock
@@ -123,7 +126,7 @@ func updateImageForToday() {
 	mapper := NewImageMapper(images)
 
 	// Get image for today
-	today := time.Now().In(berlinLoc)
+	today := time.Now().In(location)
 	selectedImage, err := mapper.GetImageForDate(today)
 	if err != nil {
 		logger.Printf("Error selecting image for today: %v", err)
@@ -131,12 +134,21 @@ func updateImageForToday() {
 	}
 
 	// Remove existing image in asset directory
-	err = os.Remove(filepath.Join(assetDir, assetImageFilename))
+	if assetImageFilename != "" {
+		err = os.Remove(filepath.Join(assetDir, assetImageFilename))
+		if err == nil {
+			logger.Printf("Removed previous image: %s", assetImageFilename)
+		} else {
+			logger.Printf("Error removing previous image: %v", err)
+		}
+	} else {
+		logger.Println("No previous image to remove :) ")
+	}
 
-	// Copy selected image to asset directory with fixed name
+	// Copy selected image to asset directory with a unique name
 	srcPath := filepath.Join(imageDir, selectedImage)
 
-	newImageName := fmt.Sprintf("today%s.jpg", today.Format("2006-01-02: HH:mm:ss"))
+	newImageName := fmt.Sprintf("today_%s.jpg", today.Format("2006-01-02"))
 	destPath := filepath.Join(assetDir, newImageName)
 
 	err = copyFile(srcPath, destPath)
@@ -191,7 +203,7 @@ func servePage(w http.ResponseWriter, r *http.Request) {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Monkey Image of the Day</title>
+    <title>Image of the Day</title>
     <style>
         body {
             background-color: #121212;
@@ -216,9 +228,9 @@ func servePage(w http.ResponseWriter, r *http.Request) {
     </style>
 </head>
 <body>
-    <h1>Monkey Image of the Day</h1>
-    <p>Enjoy a new monkey image every day!</p>
-	<img src="/assets/` + assetImageFilename + `" alt="Monkey Image of the Day">
+    <h1>Image of the Day</h1>
+    <p>Enjoy a new image every day!</p>
+	<img src="/assets/` + assetImageFilename + `" alt="Image of the Day">
 </body>
 </html>
 `
@@ -252,7 +264,7 @@ func (im *ImageMapper) GetImageForDate(date time.Time) (string, error) {
 	}
 
 	// Ensure the date is not in the future.
-	today := time.Now()
+	today := time.Now().In(location)
 	if date.After(today) {
 		return "", errors.New("date is in the future")
 	}

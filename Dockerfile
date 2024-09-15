@@ -25,5 +25,5 @@ RUN mkdir -p $IMAGE_DIR $ASSET_DIR
 COPY images/* $IMAGE_DIR/
 
 # Command to run the executable
-CMD ["./monkey-app"]
+CMD ["./motd"]
 
