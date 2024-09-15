@@ -75,6 +75,11 @@ func main() {
 	http.HandleFunc("/", servePage)
 	http.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir(assetDir))))
 
+	// Serve todays image for favicon
+	http.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, filepath.Join(assetDir, assetImageFilename))
+	})
+
 	logger.Printf("Server started on :%s. Images will be renewed at midnight in timezone '%s'.", port, timezoneName)
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		logger.Fatalf("Server failed: %v", err)
@@ -198,6 +203,7 @@ func copyFile(src, dst string) error {
 }
 
 func servePage(w http.ResponseWriter, r *http.Request) {
+	logger.Printf("request from %s: %s %s", r.RemoteAddr, r.Method, r.URL.Path)
 	htmlContent := `
 <!DOCTYPE html>
 <html lang="en">
