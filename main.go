@@ -234,8 +234,8 @@ func servePage(w http.ResponseWriter, r *http.Request) {
     </style>
 </head>
 <body>
-    <h1>Image of the Day</h1>
-    <p>Enjoy a new image every day!</p>
+    <h1>Monkey Image of the Day</h1>
+    <p>Enjoy a new one every day!</p>
 	<img src="/assets/` + assetImageFilename + `" alt="Image of the Day">
 </body>
 </html>
